@@ -1,22 +1,24 @@
+
 // Kylie Tate
 
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <errno.h>
 #include <limits.h>
 
 #define MAX_IN 1024
-#define MAX_ARGS 64
+#define MAX_ARGS 6
 
 void prompt() {
     // passing NULL and 0 which allocates the needed memory 
     // instead of providing a buffer that is already allocated
     char *cwd = getcwd(NULL, 0);
     if (cwd != NULL) {
-        printf("%s$", cwd);
+        printf("%s$ ", cwd);
         fflush(stdout);
         // frees up memory when no longer needs; prevents memory leaks
         free(cwd);
@@ -52,7 +54,6 @@ void inputAction(char *userInput) {
 
     // if tokens is NULL, the function stops
     if (tokens == NULL){ 
-        perror("tokens equals NULL");
         return; 
     }
 
@@ -61,6 +62,8 @@ void inputAction(char *userInput) {
         args[i++] = tokens;
         tokens = strtok(NULL, " "); 
     }
+
+    if (!strcmp(args[0], "exit")) { exit(EXIT_SUCCESS); }
 
     args[i] = NULL;
 
@@ -74,8 +77,6 @@ void inputAction(char *userInput) {
         int status;
         waitpid(pid, &status, 0);
     } else { perror("fork failed"); }
-
-    if (!strcmp(tokens, "exit")) { exit(EXIT_SUCCESS); }
 }
 
 int main() {
