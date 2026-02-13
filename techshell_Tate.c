@@ -48,14 +48,12 @@ void inputAction(char *userInput) {
     userInput[strcspn(userInput, "\n")] = '\0';
 
     // Turn user input into tokens
-    char *args[MAX_ARGS];
+    char *args[MAX_ARGS] = { NULL };
     char *tokens;
     tokens = strtok(userInput, " ");
 
     // if tokens is NULL, the function stops
-    if (tokens == NULL){ 
-        return; 
-    }
+    if (tokens == NULL){ return; }
 
     int i = 0;
     while (tokens != NULL && i < MAX_ARGS) { 
@@ -63,9 +61,31 @@ void inputAction(char *userInput) {
         tokens = strtok(NULL, " "); 
     }
 
+    // stops program if user types exit
     if (!strcmp(args[0], "exit")) { exit(EXIT_SUCCESS); }
 
-    args[i] = NULL;
+    // cd handling
+    if (strcmp(args[0], "cd") == 0) {
+        if (args[1] == NULL) {
+            // if just cd, go to home directory
+            char *homeDir = getenv("HOME");
+            if (homeDir == NULL) { 
+                perror("getenv() failed");
+                return;
+            }
+            if (chdir(homeDir) == -1) {
+                perror("chdir() failed");
+                return;
+            }
+        } else {
+            // changes directory to user provided path
+            if (chdir(args[1]) == -1) { 
+                perror("chdir() failed");
+                return;
+            }
+        }
+        return;
+    }
 
     pid_t pid = fork();
 
@@ -83,7 +103,13 @@ int main() {
 
     while (1) {
         prompt();
-        inputAction(input());
+
+        char *usrIn = input();
+        if (usrIn == NULL) { continue; }
+        inputAction(usrIn);
+        // main allocates the memory when calling on the input function
+        // so free here
+        free(usrIn);
     }
     return 0;
 }
