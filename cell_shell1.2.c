@@ -1,6 +1,14 @@
 
-// Name(s):
-// Description:
+// Name(s): Spencer Smith, Kylie Tate, Gavin Robichaux
+// Description: 
+//Small scale implementation of a shell that supports built in 
+//commands (such as cd, help, and exit), file redirection
+//the creation of processes, and background exe. This program was 
+//Resources used:
+//https://brennan.io/2015/01/16/write-a-shell-in-c/
+//https://www.youtube.com/watch?v=yTR00r8vBH8
+//some parts i did have to use AI assistance for debugging
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +35,8 @@ void cell_loop(void);
 
 // Built-in commands
 char *builtin_str[] = {"cd", "help", "exit"};
+
+//pointers for builtins
 int (*builtin_func[]) (char **) = {&cell_cd, &cell_help, &cell_exit};
 
 //return number of builtins
@@ -46,21 +56,30 @@ int cell_num_builtins() {
     }
     return 1;
 } copied this into chat gpt while debugging
+ recommended lines ~64-84 to properly get the home vairiable
+ and to handle errors 
 */
 int cell_cd(char **args) {
     if (args[1] == NULL) { //no argument
         
-        char *home = getenv("HOME"); 
+        char *home = getenv("HOME");  //get home variable
         if (home && chdir(home) == 0){
-            return 1;
+            return 1; //success
         }
-
+        
+        //if it fails
         fprintf(stderr, "Error 2 (No such file or directory)\n");
     } else {
+        
+        //modified this to handle the types of errors (needed to see if cd /root error)
         if (chdir(args[1]) != 0) {
+            
+            //no access
             if(errno == EACCES){
                 fprintf(stderr, "ERROR 3 (denied permissions)\n");
-            }else if(errno == ENOENT){
+            }
+            //file doesnt exist
+            else if(errno == ENOENT){
                 fprintf(stderr, "ERROR 2 (NO such file or directory)\n");
             }else{
                 fprintf(stderr, "ERROR 1 (invalid command)\n");
@@ -71,15 +90,19 @@ int cell_cd(char **args) {
     return 1;
 }
 
+//help function that lists out the built in commands
 int cell_help(char **args) {
-    printf("Basic shell implementation\n");
+    printf("Welcome to TechShell:\n");
     printf("Built-in commands:\n");
+    
+    //print each command
     for (int i = 0; i < cell_num_builtins(); i++) {
         printf("  %s\n", builtin_str[i]);
     }
     return 1;
 }
 
+//program exit, 0 stops main
 int cell_exit(char **args) {
     return 0;
 }
@@ -93,12 +116,13 @@ int cell_launch(char **args) {
     char *input_file = NULL; 
     char *output_file = NULL;
     int background = 0;
-
     
     int last = 0;
-    //iterates through the argument
+
+    //find last arg index
     while(args[last] != NULL) last++;
-    //checks for &
+
+    //checks for & at the end
     if(last > 0 && strcmp(args[last -1], "&") == 0){
         background = 1;
         args[last -1] = NULL; //switch & to null
@@ -106,10 +130,13 @@ int cell_launch(char **args) {
 
     //iterates through argument
     for(int i = 0; args[i] != NULL; i++){
+
         //checks for < redirect
         if(strcmp(args[i], "<") == 0){ 
-            //checks if the next argument is NULL
+
+            //no file after <
             if(args[i+1] == NULL){ 
+
                 //throw error
                 fprintf(stderr, "Error 2 (No such file or directory)\n");
                 return 1;
@@ -137,7 +164,7 @@ int cell_launch(char **args) {
         if(input_file != NULL){
 
             //open for reading
-            int fd = open(input_file, O_RDONLY);
+            int fd = open(input_file, O_RDONLY); 
 
             //error
             if(fd < 0){
@@ -150,13 +177,16 @@ int cell_launch(char **args) {
         }
 
         if(output_file != NULL){
+            
             //open for writing
             int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            
             //error
             if(fd < 0){
                 fprintf(stderr, "Error 2 (No such file or directory)\n");
                 exit(EXIT_FAILURE);
             }
+            
             //redirect output to file
             dup2(fd, STDOUT_FILENO);
             close(fd);
@@ -169,53 +199,63 @@ int cell_launch(char **args) {
         //exit if exec fails
         exit(EXIT_FAILURE);
     } 
+    
     //fork failed
     else if (pid < 0) {
         fprintf(stderr, "Error 1 (Invalid command)\n");
     } 
     else {
+        
+        //wait for child process unless running in background
         if(!background){
             do {
+                
+                //wait for child to finish
                 wpid = waitpid(pid, &status, WUNTRACED);
             } while (!WIFEXITED(status) && !WIFSIGNALED(status));
         } else {
-            printf("[BACKGROUND pid %d]\n", pid);
+            
+            //print background id
+            printf("[BACKGROUND pid %d]\n", pid); 
         }
     }
-
+    //return 1 to continue loop
     return 1;
 }
-
+//determine if command is a builtin or external
 int cell_execute(char **args) {
     if (args[0] == NULL) {
-        return 1;
+        return 1; //empty 
     }
-
+    
+    //check the builtins
     for (int i = 0; i < cell_num_builtins(); i++) {
         if (strcmp(args[0], builtin_str[i]) == 0) {
             return (*builtin_func[i])(args);
         }
     }
-
+    
     return cell_launch(args);
 }
 
+//tokenization
 char **cell_split_line(char *line) {
     int bufsize = CELL_TOK_BUFSIZE;
     int position = 0;
-    char **tokens = malloc(bufsize * sizeof(char*));
+    char **tokens = malloc(bufsize * sizeof(char*)); //allocate mem
     char *token;
 
     if (!tokens) {
         fprintf(stderr, "Error 1 (Invalid command)\n");
         exit(EXIT_FAILURE);
     }
-
+    //first tok
     token = strtok(line, " \t\r\n\a");
     while (token != NULL) {
+        //store
         tokens[position++] = token;
         
-
+        //expand buff if needed
         if (position >= bufsize) {
             bufsize += CELL_TOK_BUFSIZE;
             tokens = realloc(tokens, bufsize * sizeof(char*));
@@ -224,20 +264,20 @@ char **cell_split_line(char *line) {
                 exit(EXIT_FAILURE);
             }
         }
-
+        //next tok
         token = strtok(NULL, " \t\r\n\a");
     }
-
+    //null terminator
     tokens[position] = NULL;
     return tokens;
 }
-
+//read user input
 char *cell_read_line(void) {
     char *line = NULL;
     ssize_t bufsize = 0;
 
     if (getline(&line, &bufsize, stdin) == -1) {
-        if (feof(stdin)) {
+        if (feof(stdin)) { //ctrl d
             exit(EXIT_SUCCESS);
         } else {
             fprintf(stderr, "Error 1 (Invalid command)\n");
@@ -254,23 +294,28 @@ void cell_loop(void) {
     int status;
 
     do {
+        //buff for current directory
         char cwd[1024];
         if(getcwd(cwd, sizeof(cwd)) != NULL){
+            //prompt
             printf("%s$ ", cwd);
         } else {
             fprintf(stderr, "Error 2 (No such file or directory)\n");
         }
-
+        //read input and tokenize, execute command
         line = cell_read_line();
         args = cell_split_line(line);
         status = cell_execute(args);
 
+
+        //free our memory
         free(line);
         free(args);
 
     } while (status);
 }
 
+//start shell
 int main(int argc, char **argv) {
     cell_loop();
     return EXIT_SUCCESS;
