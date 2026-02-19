@@ -18,8 +18,6 @@ Make sure you have Git and a C compiler installed on your system.
     * Type this command in your terminal - `git clone <repository-url>` with the copied URL.
 2. Compile the Program
     * Navigate to the cloned repository
-    * Give permissions to be allowed to execute the file (do this only once).
-        * Run: `chmod +x <executable>`
     * To compile, run: `gcc <executable>` or `gcc <executable> -o <executable-name>` to give a name to the executable.
 3. Run the Program:
     * In your terminal, type `./<executable-output>` to run the file
