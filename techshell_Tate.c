@@ -12,7 +12,7 @@
 #include <fcntl.h>
 
 #define MAX_IN 1024
-#define MAX_ARGS 6
+#define MAX_ARGS 64
 
 void prompt() {
     // passing NULL and 0 which allocates the needed memory 
@@ -77,7 +77,7 @@ void inputAction(char *userInput) {
     } else {
         if (chdir(args[1]) != 0) {
             if(errno == EACCES){
-                fprintf(stderr, "ERROR 3 (denied permissions)\n");
+                fprintf(stderr, "ERROR 13 (denied permissions)\n");
             }else if(errno == ENOENT){
                 fprintf(stderr, "ERROR 2 (NO such file or directory)\n");
             }else{
@@ -88,101 +88,105 @@ void inputAction(char *userInput) {
     } 
         return;
     }
-    // redirecting
-        char *inFile = NULL;
-        char *outFile = NULL;
-        char *appFile = NULL;
+    pid_t pid, wpid;
+    int status;
 
-        for (int i = 0; args[i] != NULL; i++) {
-            // Check for input redirection "<"
-            if (strcmp(args[i], "<") == 0) {
-                if (args[i + 1] == NULL) { // No filename after "<"
-                    perror("No file specified for input redirection.");
-                    return;
-                }
-                
-                inFile = args[i+1];
-                // Remove the redirection operator and the filename from the args list
-                args[i] = NULL;
-                i++; // Skip the filename
-            }
-            // Check for output redirection ">"
-            else if (strcmp(args[i], ">") == 0) {
-                if (args[i + 1] == NULL) { // No filename after ">"
-                    perror("No file specified for output redirection.");
-                    return;
-                }
-                outFile = args[i+1];
-                args[i] = NULL;
-                i++; // Skip the filename
-            }
-            // Check for append redirection ">>"
-            else if (strcmp(args[i], ">>") == 0) {
-                if (args[i + 1] == NULL) { // No filename after ">>"
-                    perror("No file specified for append redirection.");
-                    return;
-                }
-                appFile = args[i+1];
-                args[i] = NULL;
-                i++; // Skip the filename
-            }
-            // Check for error redirection "2>"
-            else if (strcmp(args[i], "2>") == 0) {
-                if (args[i + 1] == NULL) { // No filename after "2>"
-                    perror("No file specified for error redirection.");
-                    return;
-                }
-                int fd = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                if (fd < 0) {
-                    perror("open failed");
-                    return;
-                }
-                dup2(fd, STDERR_FILENO);
-                close(fd);
+    //input and output redirect files
+    char *input_file = NULL; 
+    char *output_file = NULL;
+    int background = 0;
 
-                args[i] = NULL;
-                i++; // Skip the filename
-            }
-    // If no valid redirection operator, continue processing
-}
+    
+    int last = 0;
+    //iterates through the argument
+    while(args[last] != NULL) last++;
+    //checks for &
+    if(last > 0 && strcmp(args[last -1], "&") == 0){
+        background = 1;
+        args[last -1] = NULL; //switch & to null
+    }
 
-    pid_t pid = fork();
-
-    if (pid == 0) {  // if true, then it is a child process
-        if (inFile != NULL) {
-            int fd = open(inFile, O_RDONLY | O_CREAT);
-            if (fd < 0) {
-                perror("open failed1");
+    //iterates through argument
+    for(int i = 0; args[i] != NULL; i++){
+        //checks for < redirect
+        if(strcmp(args[i], "<") == 0){ 
+            //checks if the next argument is NULL
+            if(args[i+1] == NULL){ 
+                //throw error
+                fprintf(stderr, "Error 2 (No such file or directory)\n");
                 return;
             }
+            //if we pass the check, store the arg
+            input_file = args[i+1];
+            args[i] = NULL; //set to null
+        }
+        //same idea as the last one
+        else if(strcmp(args[i], ">") == 0){
+            if(args[i+1] == NULL){
+                fprintf(stderr, "Error 2 (No such file or directory)\n");
+                return;
+            }
+            output_file = args[i+1];
+            args[i] = NULL;//set to null
+        }
+    }
+    //create child process
+    pid = fork();
+
+    if (pid == 0) {
+        //child process
+        //handle input redirect
+        if(input_file != NULL){
+
+            //open for reading
+            int fd = open(input_file, O_RDONLY);
+
+            //error
+            if(fd < 0){
+                fprintf(stderr, "Error 2 (No such file or directory)\n");
+                exit(EXIT_FAILURE);
+            }
+            //redirect input to file
             dup2(fd, STDIN_FILENO);
             close(fd);
         }
-        if (outFile != NULL) {
-            int fd = open(outFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            if (fd < 0) {
-                perror("open failed2");
-                return;
+
+        if(output_file != NULL){
+            //open for writing
+            int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            //error
+            if(fd < 0){
+                fprintf(stderr, "Error 2 (No such file or directory)\n");
+                exit(EXIT_FAILURE);
             }
+            //redirect output to file
             dup2(fd, STDOUT_FILENO);
             close(fd);
         }
-        if (appFile != NULL) {
-            int fd = open(appFile, O_WRONLY | O_CREAT | O_APPEND, 0644);
-            if (fd < 0) {
-                perror("open failed2");
-                return;
-            }
-            dup2(fd, STDOUT_FILENO);
-            close(fd);
+
+        //replace child process with command
+        if (execvp(args[0], args) == -1) {
+            fprintf(stderr, "Error 1 (Invalid command)\n");
         }
-        execvp(args[0], args);
-        perror("execvp failed");
+        //exit if exec fails
         exit(EXIT_FAILURE);
-    } else if (pid > 0) {  // if true, then it is the parent
-        int status;
-        waitpid(pid, &status, 0);
-    } else { perror("fork failed"); }
+    } 
+    //fork failed
+    else if (pid < 0) {
+        fprintf(stderr, "Error 1 (Invalid command)\n");
+    } 
+    else {
+        if(!background){
+            do {
+                wpid = waitpid(pid, &status, WUNTRACED);
+            } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+        } else {
+            printf("[BACKGROUND pid %d]\n", pid);
+        }
+    }
+
+    return;
+
 }
 
 int main() {
